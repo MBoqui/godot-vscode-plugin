@@ -32,6 +32,7 @@ import {
 } from "./utils";
 import { prompt_for_godot_executable } from "./utils/prompts";
 import { killSubProcesses, subProcess } from "./utils/subspawn";
+import { DecorationsProvider as GDDecorationsProvider } from "./providers/decorations";
 
 interface Extension {
 	context?: vscode.ExtensionContext;
@@ -49,6 +50,7 @@ interface Extension {
 	completionProvider?: GDCompletionItemProvider;
 	tasksProvider?: GDTaskProvider;
 	codeLensProvider?: GDCodeLensProvider;
+	decorationProvider?: GDDecorationsProvider;
 }
 
 export const globals: Extension = {};
@@ -68,6 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
 	globals.docsProvider = new GDDocumentationProvider(context);
 	globals.definitionProvider = new GDDefinitionProvider(context);
 	globals.codeLensProvider = new GDCodeLensProvider(context);
+	globals.decorationProvider = new GDDecorationsProvider(context);
 	// globals.semanticTokensProvider = new GDSemanticTokensProvider(context);
 	// globals.completionProvider = new GDCompletionItemProvider(context);
 	// globals.tasksProvider = new GDTaskProvider(context);
