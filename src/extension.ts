@@ -12,6 +12,9 @@ import {
 	GDDocumentationProvider,
 	GDDefinitionProvider,
 	GDTaskProvider,
+	GDCodeLensProvider,
+	GDReferenceProvider,
+	GDDecorationsProvider,
 } from "./providers";
 import { ClientConnectionManager } from "./lsp";
 import { ScenePreviewProvider } from "./scene_tools";
@@ -50,6 +53,9 @@ interface Extension {
 	completionProvider?: GDCompletionItemProvider;
 	tasksProvider?: GDTaskProvider;
 	devServer?: DebugServer;
+	codeLensProvider?: GDCodeLensProvider;
+	decorationProvider?: GDDecorationsProvider;
+	referenceProvider?: GDReferenceProvider;
 }
 
 export const globals: Extension = {};
@@ -68,6 +74,9 @@ export function activate(context: vscode.ExtensionContext) {
 	globals.formattingProvider = new FormattingProvider(context);
 	globals.docsProvider = new GDDocumentationProvider(context);
 	globals.definitionProvider = new GDDefinitionProvider(context);
+	globals.codeLensProvider = new GDCodeLensProvider(context);
+	globals.decorationProvider = new GDDecorationsProvider(context);
+	globals.referenceProvider = new GDReferenceProvider(context);
 	// globals.semanticTokensProvider = new GDSemanticTokensProvider(context);
 	// globals.completionProvider = new GDCompletionItemProvider(context);
 	// globals.tasksProvider = new GDTaskProvider(context);
@@ -114,14 +123,14 @@ async function initial_setup() {
 			break;
 		}
 		case "WRONG_VERSION": {
-			const message = `The specified Godot executable, '${godotPath}' is the wrong version. 
+			const message = `The specified Godot executable, '${godotPath}' is the wrong version.
 				The current project uses Godot v${projectVersion}, but the specified executable is Godot v${result.version}.
 				Extension features will not work correctly unless this is fixed.`;
 			prompt_for_godot_executable(message, settingName);
 			break;
 		}
 		case "INVALID_EXE": {
-			const message = `The specified Godot executable, '${godotPath}' is invalid. 
+			const message = `The specified Godot executable, '${godotPath}' is invalid.
 				Extension features will not work correctly unless this is fixed.`;
 			prompt_for_godot_executable(message, settingName);
 			break;
@@ -274,7 +283,7 @@ class GodotEditorTerminal implements vscode.Pseudoterminal {
 	private closeEmitter = new vscode.EventEmitter<number>();
 	onDidClose?: vscode.Event<number> = this.closeEmitter.event;
 
-	constructor(private command: string) {}
+	constructor(private command: string) { }
 
 	open(initialDimensions: vscode.TerminalDimensions | undefined): void {
 		const proc = subProcess("GodotEditor", this.command, { shell: true, detached: true });
