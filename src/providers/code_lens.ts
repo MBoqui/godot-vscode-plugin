@@ -1,0 +1,125 @@
+import * as vscode from "vscode";
+import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, ProviderResult, TextDocument } from "vscode";
+import { get_configuration } from "../utils";
+import { globals } from "../extension";
+interface ReferenceRequest {
+    FileUri: vscode.Uri;
+    Line: number;
+    Column: number;
+}
+
+interface ReferenceLocation {
+    uri: string;
+    range: vscode.Range;
+}
+
+export class GDCodeLensProvider implements CodeLensProvider {
+    public readonly onDidChangeCodeLenses?: Event<void>;
+    private funcRegex = /^func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
+    private codeLenses: CodeLens[] = [];
+
+    constructor(private context: ExtensionContext) {
+        const selector = [{ language: "gdscript", scheme: "file" }];
+        const providerDisposable = vscode.languages.registerCodeLensProvider(selector, this);
+        context.subscriptions.push(providerDisposable);
+    }
+
+    public async provideCodeLenses(
+        document: TextDocument,
+        token: CancellationToken
+    ): Promise<CodeLens[]> {
+        if (!get_configuration("referencesCodeLens.enabled")) {
+            return [];
+        }
+
+        this.codeLenses = [];
+        const lines = document.getText().split("\n");
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const match = this.funcRegex.exec(line);
+
+            if (!match || match.index === undefined) {
+                continue;
+            }
+
+            this.provideCognitiveComplexity(i);
+            await this.provideReferences(match, line, i, document.uri);
+        }
+
+        return this.codeLenses;
+    }
+
+    private async provideReferences(
+        match: RegExpExecArray,
+        line: string,
+        lineIndex: number,
+        documentUri: vscode.Uri
+    ) {
+        const functionName = match[1];
+
+        const nameIndex = line.indexOf(functionName, match.index);
+        const range = new vscode.Range(
+            new vscode.Position(lineIndex, nameIndex),
+            new vscode.Position(lineIndex, nameIndex + functionName.length)
+        );
+
+        const references = await getReferences({
+            FileUri: documentUri,
+            Line: range.start.line,
+            Column: range.start.character
+        });
+
+        if (!references || references.length <= 1) {
+            return;
+        }
+
+        const remappedLocations = references
+            .map(loc => new vscode.Location(vscode.Uri.parse(loc.uri), loc.range))
+            .filter(loc => loc.range.start.line !== range.start.line);
+
+        const count = remappedLocations.length;
+        if (count === 0) {
+            return;
+        }
+
+        this.codeLenses.push(new CodeLens(range, {
+            title: count === 1 ? "1 reference" : `${count} references`,
+            command: "editor.action.showReferences",
+            arguments: [documentUri, range.start, remappedLocations]
+        }));
+    }
+
+    private provideCognitiveComplexity(lineIndex: number) {
+        const range = new vscode.Range(
+            new vscode.Position(lineIndex, 0),
+            new vscode.Position(lineIndex, 0)
+        );
+
+        this.codeLenses.push(new CodeLens(range, {
+            title: "",
+            command: ""
+        }));
+    }
+
+    public async resolveCodeLens(
+        codeLens: CodeLens,
+        _token: CancellationToken
+    ): Promise<CodeLens | null> {
+        if (!get_configuration("referencesCodeLens.enabled")) {
+            return null;
+        }
+        return codeLens;
+    }
+}
+
+async function getReferences(request: ReferenceRequest): Promise<ReferenceLocation[]> {
+    return await globals.lsp.client.sendRequest("textDocument/references", {
+        textDocument: { uri: request.FileUri.toString() },
+        position: {
+            line: request.Line,
+            character: request.Column
+        },
+        context: { includeDeclaration: false }
+    });
+}

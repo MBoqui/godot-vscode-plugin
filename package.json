@@ -375,6 +375,11 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Whether to enable inlay hints in GDResource (.tscn, .tres, etc) files"
+				},
+				"godotTools.referencesCodeLens.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable references CodeLens in Godot files."
 				}
 			}
 		},
