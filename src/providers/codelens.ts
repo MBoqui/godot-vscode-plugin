@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, ProviderResult, TextDocument } from "vscode";
+import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, TextDocument } from "vscode";
 import { get_configuration } from "../utils";
 import { globals } from "../extension";
+
 interface ReferenceRequest {
     FileUri: vscode.Uri;
     Line: number;
@@ -26,7 +27,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
 
     public async provideCodeLenses(
         document: TextDocument,
-        token: CancellationToken
+        _token: CancellationToken
     ): Promise<CodeLens[]> {
         if (!get_configuration("referencesCodeLens.enabled")) {
             return [];
@@ -43,7 +44,6 @@ export class GDCodeLensProvider implements CodeLensProvider {
                 continue;
             }
 
-            this.provideCognitiveComplexity(i);
             await this.provideReferences(match, line, i, document.uri);
         }
 
@@ -87,18 +87,6 @@ export class GDCodeLensProvider implements CodeLensProvider {
             title: count === 1 ? "1 reference" : `${count} references`,
             command: "editor.action.showReferences",
             arguments: [documentUri, range.start, remappedLocations]
-        }));
-    }
-
-    private provideCognitiveComplexity(lineIndex: number) {
-        const range = new vscode.Range(
-            new vscode.Position(lineIndex, 0),
-            new vscode.Position(lineIndex, 0)
-        );
-
-        this.codeLenses.push(new CodeLens(range, {
-            title: "",
-            command: ""
         }));
     }
 
