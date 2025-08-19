@@ -45,6 +45,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
             }
 
             await this.provideReferences(match, line, i, document.uri);
+            await this.provideOverride(match, line, i, document.uri);
         }
 
         return this.codeLenses;
@@ -63,6 +64,15 @@ export class GDCodeLensProvider implements CodeLensProvider {
             new vscode.Position(lineIndex, nameIndex),
             new vscode.Position(lineIndex, nameIndex + functionName.length)
         );
+
+        const locations = await globals.lsp.client.sendRequest("textDocument/definition", {
+            textDocument: { uri: documentUri.toString() },
+            position: { line: range.start.line, character: range.start.character }
+        });
+
+        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
+            return;
+        }
 
         const references = await getReferences({
             FileUri: documentUri,
@@ -87,6 +97,47 @@ export class GDCodeLensProvider implements CodeLensProvider {
             title: count === 1 ? "1 reference" : `${count} references`,
             command: "editor.action.showReferences",
             arguments: [documentUri, range.start, remappedLocations]
+        }));
+    }
+
+
+    private async provideOverride(
+        match: RegExpExecArray,
+        line: string,
+        lineIndex: number,
+        documentUri: vscode.Uri
+    ) {
+        const functionName = match[1];
+        const nameIndex = line.indexOf(functionName, match.index);
+        const range = new vscode.Range(
+            new vscode.Position(lineIndex, nameIndex),
+            new vscode.Position(lineIndex, nameIndex + functionName.length)
+        );
+
+        const locations = await globals.lsp.client.sendRequest("textDocument/definition", {
+            textDocument: { uri: documentUri.toString() },
+            position: { line: range.start.line, character: range.start.character }
+        });
+        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
+            this.codeLenses.push(new CodeLens(range, {
+                title: "overrides native method",
+                command: '',
+                arguments: []
+            }));
+            return;
+        }
+        const loc = Array.isArray(locations) ? locations[0] : locations;
+        const isSameFile = vscode.Uri.parse(loc.uri).toString() === documentUri.toString();
+        const isSameLine = loc.range?.start?.line === range.start.line;
+        if (isSameFile && isSameLine) {
+            return;
+        }
+        const file = vscode.Uri.parse(loc.uri).fsPath.split(/[/\\]/).pop();
+        const lineNum = (loc.range?.start?.line ?? 0) + 1;
+        this.codeLenses.push(new CodeLens(range, {
+            title: `overrides: ${file}:${lineNum}`,
+            command: '',
+            arguments: []
         }));
     }
 
