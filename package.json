@@ -379,7 +379,42 @@
 				"godotTools.referencesCodeLens.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Enable/disable references CodeLens in Godot files."
+					"description": "Enable/disable references CodeLens in GDScript files."
+				},
+				"godotTools.referencesCodeLens.func": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for functions in GDScript files."
+				},
+				"godotTools.referencesCodeLens.var": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for variables in GDScript files."
+				},
+				"godotTools.referencesCodeLens.const": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for constants in GDScript files."
+				},
+				"godotTools.referencesCodeLens.signal": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for signals in GDScript files."
+				},
+				"godotTools.referencesCodeLens.enum": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for enums in GDScript files."
+				},
+				"godotTools.referencesCodeLens.className": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for class_name declarations in GDScript files."
+				},
+				"godotTools.referencesCodeLens.class": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable reference count CodeLens for class (subclass) declarations in GDScript files."
 				}
 			}
 		},
