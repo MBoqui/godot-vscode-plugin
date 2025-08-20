@@ -16,7 +16,13 @@ interface ReferenceLocation {
 
 export class GDCodeLensProvider implements CodeLensProvider {
     public readonly onDidChangeCodeLenses?: Event<void>;
-    private funcRegex = /^func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
+    private funcRegex = /^(?:static\s+)?func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
+    private varRegex = /^(?:@[a-zA-Z_][a-zA-Z0-9_]*\s+)?(?:static\s+)?var\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
+    private constRegex = /^const\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
+    private signalRegex = /^signal\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
+    private enumRegex = /^enum\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
+    private classNameRegex = /^class_name\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
+    private classRegex = /^class\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
 
     constructor(private context: ExtensionContext) {
         const selector = [{ language: "gdscript", scheme: "file" }];
@@ -35,9 +41,27 @@ export class GDCodeLensProvider implements CodeLensProvider {
         const codeLenses: CodeLens[] = [];
         const lines = document.getText().split("\n");
 
+        const matchers = [
+            { regex: this.funcRegex, enabled: () => get_configuration("referencesCodeLens.func") },
+            { regex: this.varRegex, enabled: () => get_configuration("referencesCodeLens.var") },
+            { regex: this.constRegex, enabled: () => get_configuration("referencesCodeLens.const") },
+            { regex: this.signalRegex, enabled: () => get_configuration("referencesCodeLens.signal") },
+            { regex: this.enumRegex, enabled: () => get_configuration("referencesCodeLens.enum") },
+            { regex: this.classNameRegex, enabled: () => get_configuration("referencesCodeLens.className") },
+            { regex: this.classRegex, enabled: () => get_configuration("referencesCodeLens.class") },
+        ];
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            const match = this.funcRegex.exec(line);
+            let match: RegExpExecArray | null = null;
+            for (const matcher of matchers) {
+                if (!matcher.enabled()) continue;
+                const type_match = matcher.regex.exec(line);
+                if (type_match) {
+                    match = type_match;
+                    break;
+                }
+            }
 
             if (!match || match.index === undefined) {
                 continue;
@@ -57,12 +81,11 @@ export class GDCodeLensProvider implements CodeLensProvider {
         documentUri: vscode.Uri,
         codeLenses: CodeLens[]
     ) {
-        const functionName = match[1];
-
-        const nameIndex = line.indexOf(functionName, match.index);
+        const symbolName = match[1];
+        const nameIndex = line.indexOf(symbolName, match.index);
         const range = new vscode.Range(
             new vscode.Position(lineIndex, nameIndex),
-            new vscode.Position(lineIndex, nameIndex + functionName.length)
+            new vscode.Position(lineIndex, nameIndex + symbolName.length)
         );
 
         const locations = await globals.lsp.client.sendRequest("textDocument/definition", {
@@ -107,11 +130,11 @@ export class GDCodeLensProvider implements CodeLensProvider {
         documentUri: vscode.Uri,
         codeLenses: CodeLens[]
     ) {
-        const functionName = match[1];
-        const nameIndex = line.indexOf(functionName, match.index);
+        const symbolName = match[1];
+        const nameIndex = line.indexOf(symbolName, match.index);
         const range = new vscode.Range(
             new vscode.Position(lineIndex, nameIndex),
-            new vscode.Position(lineIndex, nameIndex + functionName.length)
+            new vscode.Position(lineIndex, nameIndex + symbolName.length)
         );
 
         const locations = await globals.lsp.client.sendRequest("textDocument/definition", {
@@ -120,7 +143,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
         });
         if (!locations || (Array.isArray(locations) && locations.length === 0)) {
             codeLenses.push(new CodeLens(range, {
-                title: "overrides native method",
+                title: "overrides native",
                 command: '',
                 arguments: []
             }));
