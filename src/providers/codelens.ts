@@ -17,7 +17,6 @@ interface ReferenceLocation {
 export class GDCodeLensProvider implements CodeLensProvider {
     public readonly onDidChangeCodeLenses?: Event<void>;
     private funcRegex = /^func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
-    private codeLenses: CodeLens[] = [];
 
     constructor(private context: ExtensionContext) {
         const selector = [{ language: "gdscript", scheme: "file" }];
@@ -33,7 +32,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
             return [];
         }
 
-        this.codeLenses = [];
+        const codeLenses: CodeLens[] = [];
         const lines = document.getText().split("\n");
 
         for (let i = 0; i < lines.length; i++) {
@@ -44,18 +43,19 @@ export class GDCodeLensProvider implements CodeLensProvider {
                 continue;
             }
 
-            await this.provideReferences(match, line, i, document.uri);
-            await this.provideOverride(match, line, i, document.uri);
+            await this.provideReferences(match, line, i, document.uri, codeLenses);
+            await this.provideOverride(match, line, i, document.uri, codeLenses);
         }
 
-        return this.codeLenses;
+        return codeLenses;
     }
 
     private async provideReferences(
         match: RegExpExecArray,
         line: string,
         lineIndex: number,
-        documentUri: vscode.Uri
+        documentUri: vscode.Uri,
+        codeLenses: CodeLens[]
     ) {
         const functionName = match[1];
 
@@ -93,19 +93,19 @@ export class GDCodeLensProvider implements CodeLensProvider {
             return;
         }
 
-        this.codeLenses.push(new CodeLens(range, {
+        codeLenses.push(new CodeLens(range, {
             title: count === 1 ? "1 reference" : `${count} references`,
             command: "editor.action.showReferences",
             arguments: [documentUri, range.start, remappedLocations]
         }));
     }
 
-
     private async provideOverride(
         match: RegExpExecArray,
         line: string,
         lineIndex: number,
-        documentUri: vscode.Uri
+        documentUri: vscode.Uri,
+        codeLenses: CodeLens[]
     ) {
         const functionName = match[1];
         const nameIndex = line.indexOf(functionName, match.index);
@@ -119,7 +119,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
             position: { line: range.start.line, character: range.start.character }
         });
         if (!locations || (Array.isArray(locations) && locations.length === 0)) {
-            this.codeLenses.push(new CodeLens(range, {
+            codeLenses.push(new CodeLens(range, {
                 title: "overrides native method",
                 command: '',
                 arguments: []
@@ -134,7 +134,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
         }
         const file = vscode.Uri.parse(loc.uri).fsPath.split(/[/\\]/).pop();
         const lineNum = (loc.range?.start?.line ?? 0) + 1;
-        this.codeLenses.push(new CodeLens(range, {
+        codeLenses.push(new CodeLens(range, {
             title: `overrides: ${file}:${lineNum}`,
             command: '',
             arguments: []
