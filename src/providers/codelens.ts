@@ -24,17 +24,40 @@ export class GDCodeLensProvider implements CodeLensProvider {
     private classNameRegex = /^class_name\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
     private classRegex = /^class\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
 
+    private cachedConfig: Record<string, boolean> = {};
+
     constructor(private context: ExtensionContext) {
         const selector = [{ language: "gdscript", scheme: "file" }];
         const providerDisposable = vscode.languages.registerCodeLensProvider(selector, this);
         context.subscriptions.push(providerDisposable);
+
+        this.updateCachedConfig();
+        const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration("godotTools")) {
+                this.updateCachedConfig();
+            }
+        });
+        context.subscriptions.push(configChangeDisposable);
+    }
+
+    private updateCachedConfig() {
+        this.cachedConfig = {
+            enabled: get_configuration("referencesCodeLens.enabled", true),
+            func: get_configuration("referencesCodeLens.func", true),
+            var: get_configuration("referencesCodeLens.var", true),
+            const: get_configuration("referencesCodeLens.const", true),
+            signal: get_configuration("referencesCodeLens.signal", true),
+            enum: get_configuration("referencesCodeLens.enum", true),
+            className: get_configuration("referencesCodeLens.className", true),
+            class: get_configuration("referencesCodeLens.class", true),
+        };
     }
 
     public async provideCodeLenses(
         document: TextDocument,
         _token: CancellationToken
     ): Promise<CodeLens[]> {
-        if (!get_configuration("referencesCodeLens.enabled")) {
+        if (!this.cachedConfig.enabled) {
             return [];
         }
 
@@ -42,20 +65,21 @@ export class GDCodeLensProvider implements CodeLensProvider {
         const lines = document.getText().split("\n");
 
         const matchers = [
-            { regex: this.funcRegex, enabled: () => get_configuration("referencesCodeLens.func") },
-            { regex: this.varRegex, enabled: () => get_configuration("referencesCodeLens.var") },
-            { regex: this.constRegex, enabled: () => get_configuration("referencesCodeLens.const") },
-            { regex: this.signalRegex, enabled: () => get_configuration("referencesCodeLens.signal") },
-            { regex: this.enumRegex, enabled: () => get_configuration("referencesCodeLens.enum") },
-            { regex: this.classNameRegex, enabled: () => get_configuration("referencesCodeLens.className") },
-            { regex: this.classRegex, enabled: () => get_configuration("referencesCodeLens.class") },
+            { regex: this.funcRegex, enabled: this.cachedConfig.func },
+            { regex: this.varRegex, enabled: this.cachedConfig.var },
+            { regex: this.constRegex, enabled: this.cachedConfig.const },
+            { regex: this.signalRegex, enabled: this.cachedConfig.signal },
+            { regex: this.enumRegex, enabled: this.cachedConfig.enum },
+            { regex: this.classNameRegex, enabled: this.cachedConfig.className },
+            { regex: this.classRegex, enabled: this.cachedConfig.class },
         ];
 
+        const lensPromises: Promise<void>[] = [];
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             let match: RegExpExecArray | null = null;
             for (const matcher of matchers) {
-                if (!matcher.enabled()) continue;
+                if (!matcher.enabled) continue;
                 const type_match = matcher.regex.exec(line);
                 if (type_match) {
                     match = type_match;
@@ -67,10 +91,11 @@ export class GDCodeLensProvider implements CodeLensProvider {
                 continue;
             }
 
-            await this.provideReferences(match, line, i, document.uri, codeLenses);
-            await this.provideOverride(match, line, i, document.uri, codeLenses);
+            lensPromises.push(this.provideReferences(match, line, i, document.uri, codeLenses));
+            lensPromises.push(this.provideOverride(match, line, i, document.uri, codeLenses));
         }
 
+        await Promise.all(lensPromises);
         return codeLenses;
     }
 
@@ -144,7 +169,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
         if (!locations || (Array.isArray(locations) && locations.length === 0)) {
             codeLenses.push(new CodeLens(range, {
                 title: "overrides native",
-                command: '',
+                command: "",
                 arguments: []
             }));
             return;
@@ -159,7 +184,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
         const lineNum = (loc.range?.start?.line ?? 0) + 1;
         codeLenses.push(new CodeLens(range, {
             title: `overrides: ${file}:${lineNum}`,
-            command: '',
+            command: "",
             arguments: []
         }));
     }
@@ -168,7 +193,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
         codeLens: CodeLens,
         _token: CancellationToken
     ): Promise<CodeLens | null> {
-        if (!get_configuration("referencesCodeLens.enabled")) {
+        if (!this.cachedConfig.enabled) {
             return null;
         }
         return codeLens;
