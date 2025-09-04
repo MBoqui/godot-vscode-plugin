@@ -1,21 +1,131 @@
 import * as vscode from "vscode";
+
 import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, TextDocument } from "vscode";
+
 import { get_configuration } from "../utils";
 import { globals } from "../extension";
 
-interface ReferenceRequest {
+interface SymbolRequest {
     FileUri: vscode.Uri;
     Line: number;
     Column: number;
 }
 
-interface ReferenceLocation {
+interface SymbolLocation {
     uri: string;
     range: vscode.Range;
 }
 
+class ReferenceCodeLens extends vscode.CodeLens {
+    symbolName: string;
+    documentUri: string;
+
+    constructor(range: vscode.Range, symbolName: string, documentUri: string) {
+        super(range);
+        this.symbolName = symbolName;
+        this.documentUri = documentUri;
+    }
+
+    async resolve(token: CancellationToken): Promise<vscode.CodeLens> {
+        if (token.isCancellationRequested) {
+            return null;
+        }
+        const range = this.range;
+        const locations = await getDefinition({
+            FileUri: vscode.Uri.parse(this.documentUri),
+            Line: range.start.line,
+            Column: range.start.character
+        }, token);
+        if (token.isCancellationRequested) {
+            return null;
+        }
+        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
+            return null;
+        }
+
+        const references = await getReferences({
+            FileUri: vscode.Uri.parse(this.documentUri),
+            Line: range.start.line,
+            Column: range.start.character
+        }, token);
+        if (token.isCancellationRequested) {
+            return null;
+        }
+        if (!references || references.length <= 1) {
+            return null;
+        }
+
+        const remappedLocations = references
+            .map(loc => new vscode.Location(vscode.Uri.parse(loc.uri), loc.range))
+            .filter(loc => loc.range.start.line !== range.start.line);
+        const count = remappedLocations.length;
+        if (count === 0) {
+            return null;
+        }
+
+        this.command = {
+            title: count === 1 ? "1 reference" : `${count} references`,
+            command: "editor.action.showReferences",
+            arguments: [vscode.Uri.parse(this.documentUri), range.start, remappedLocations]
+        };
+        return this;
+    }
+}
+
+class OverrideCodeLens extends vscode.CodeLens {
+    symbolName: string;
+    documentUri: string;
+
+    constructor(range: vscode.Range, symbolName: string, documentUri: string) {
+        super(range);
+        this.symbolName = symbolName;
+        this.documentUri = documentUri;
+    }
+
+    async resolve(token: CancellationToken): Promise<vscode.CodeLens> {
+        if (token.isCancellationRequested) {
+            return null;
+        }
+        const range = this.range;
+        const locations = await getDefinition({
+            FileUri: vscode.Uri.parse(this.documentUri),
+            Line: range.start.line,
+            Column: range.start.character
+        }, token);
+        if (token.isCancellationRequested) {
+            return null;
+        }
+        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
+            this.command = {
+                title: "overrides native",
+                command: "",
+                arguments: []
+            };
+            return this;
+        }
+
+        const loc = Array.isArray(locations) ? locations[0] : locations;
+        const isSameFile = vscode.Uri.parse(loc.uri).toString() === this.documentUri;
+        const isSameLine = loc.range?.start?.line === range.start.line;
+        if (isSameFile && isSameLine) {
+            return null;
+        }
+
+        const file = vscode.Uri.parse(loc.uri).fsPath.split(/[/\\]/).pop();
+        const lineNum = (loc.range?.start?.line ?? 0) + 1;
+        this.command = {
+            title: `overrides: ${file}:${lineNum}`,
+            command: "",
+            arguments: []
+        };
+        return this;
+    }
+}
+
+
 export class GDCodeLensProvider implements CodeLensProvider {
     public readonly onDidChangeCodeLenses?: Event<void>;
+
     private funcRegex = /^(?:static\s+)?func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
     private varRegex = /^(?:@[a-zA-Z_][a-zA-Z0-9_]*\s+)?(?:static\s+)?var\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
     private constRegex = /^const\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
@@ -55,8 +165,11 @@ export class GDCodeLensProvider implements CodeLensProvider {
 
     public async provideCodeLenses(
         document: TextDocument,
-        _token: CancellationToken
+        token: CancellationToken
     ): Promise<CodeLens[]> {
+        if (token.isCancellationRequested) {
+            return [];
+        }
         if (!this.cachedConfig.enabled) {
             return [];
         }
@@ -74,8 +187,10 @@ export class GDCodeLensProvider implements CodeLensProvider {
             { regex: this.classRegex, enabled: this.cachedConfig.class },
         ];
 
-        const lensPromises: Promise<void>[] = [];
         for (let i = 0; i < lines.length; i++) {
+            if (token.isCancellationRequested) {
+                return [];
+            }
             const line = lines[i];
             let match: RegExpExecArray | null = null;
             for (const matcher of matchers) {
@@ -91,122 +206,61 @@ export class GDCodeLensProvider implements CodeLensProvider {
                 continue;
             }
 
-            lensPromises.push(this.provideReferences(match, line, i, document.uri, codeLenses));
-            lensPromises.push(this.provideOverride(match, line, i, document.uri, codeLenses));
-        }
+            const symbolName = match[1];
+            const nameIndex = line.indexOf(symbolName, match.index);
+            const range = new vscode.Range(
+                new vscode.Position(i, nameIndex),
+                new vscode.Position(i, nameIndex + symbolName.length)
+            );
 
-        await Promise.all(lensPromises);
+            codeLenses.push(new ReferenceCodeLens(range, symbolName, document.uri.toString()));
+            codeLenses.push(new OverrideCodeLens(range, symbolName, document.uri.toString()));
+        }
         return codeLenses;
-    }
-
-    private async provideReferences(
-        match: RegExpExecArray,
-        line: string,
-        lineIndex: number,
-        documentUri: vscode.Uri,
-        codeLenses: CodeLens[]
-    ) {
-        const symbolName = match[1];
-        const nameIndex = line.indexOf(symbolName, match.index);
-        const range = new vscode.Range(
-            new vscode.Position(lineIndex, nameIndex),
-            new vscode.Position(lineIndex, nameIndex + symbolName.length)
-        );
-
-        const locations = await globals.lsp.client.sendRequest("textDocument/definition", {
-            textDocument: { uri: documentUri.toString() },
-            position: { line: range.start.line, character: range.start.character }
-        });
-
-        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
-            return;
-        }
-
-        const references = await getReferences({
-            FileUri: documentUri,
-            Line: range.start.line,
-            Column: range.start.character
-        });
-
-        if (!references || references.length <= 1) {
-            return;
-        }
-
-        const remappedLocations = references
-            .map(loc => new vscode.Location(vscode.Uri.parse(loc.uri), loc.range))
-            .filter(loc => loc.range.start.line !== range.start.line);
-
-        const count = remappedLocations.length;
-        if (count === 0) {
-            return;
-        }
-
-        codeLenses.push(new CodeLens(range, {
-            title: count === 1 ? "1 reference" : `${count} references`,
-            command: "editor.action.showReferences",
-            arguments: [documentUri, range.start, remappedLocations]
-        }));
-    }
-
-    private async provideOverride(
-        match: RegExpExecArray,
-        line: string,
-        lineIndex: number,
-        documentUri: vscode.Uri,
-        codeLenses: CodeLens[]
-    ) {
-        const symbolName = match[1];
-        const nameIndex = line.indexOf(symbolName, match.index);
-        const range = new vscode.Range(
-            new vscode.Position(lineIndex, nameIndex),
-            new vscode.Position(lineIndex, nameIndex + symbolName.length)
-        );
-
-        const locations = await globals.lsp.client.sendRequest("textDocument/definition", {
-            textDocument: { uri: documentUri.toString() },
-            position: { line: range.start.line, character: range.start.character }
-        });
-        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
-            codeLenses.push(new CodeLens(range, {
-                title: "overrides native",
-                command: "",
-                arguments: []
-            }));
-            return;
-        }
-        const loc = Array.isArray(locations) ? locations[0] : locations;
-        const isSameFile = vscode.Uri.parse(loc.uri).toString() === documentUri.toString();
-        const isSameLine = loc.range?.start?.line === range.start.line;
-        if (isSameFile && isSameLine) {
-            return;
-        }
-        const file = vscode.Uri.parse(loc.uri).fsPath.split(/[/\\]/).pop();
-        const lineNum = (loc.range?.start?.line ?? 0) + 1;
-        codeLenses.push(new CodeLens(range, {
-            title: `overrides: ${file}:${lineNum}`,
-            command: "",
-            arguments: []
-        }));
     }
 
     public async resolveCodeLens(
         codeLens: CodeLens,
-        _token: CancellationToken
+        token: CancellationToken
     ): Promise<CodeLens | null> {
+        if (token.isCancellationRequested) {
+            return null;
+        }
         if (!this.cachedConfig.enabled) {
             return null;
+        }
+        if (codeLens instanceof ReferenceCodeLens || codeLens instanceof OverrideCodeLens) {
+            return await codeLens.resolve(token);
         }
         return codeLens;
     }
 }
 
-async function getReferences(request: ReferenceRequest): Promise<ReferenceLocation[]> {
-    return await globals.lsp.client.sendRequest("textDocument/references", {
-        textDocument: { uri: request.FileUri.toString() },
-        position: {
-            line: request.Line,
-            character: request.Column
+async function getReferences(request: SymbolRequest, token: CancellationToken): Promise<SymbolLocation[]> {
+    return await globals.lsp.client.sendRequest(
+        "textDocument/references",
+        {
+            textDocument: { uri: request.FileUri.toString() },
+            position: {
+                line: request.Line,
+                character: request.Column
+            },
+            context: { includeDeclaration: false }
         },
-        context: { includeDeclaration: false }
-    });
+        token
+    );
+}
+
+async function getDefinition(request: SymbolRequest, token: CancellationToken): Promise<SymbolLocation[] | undefined> {
+    return await globals.lsp.client.sendRequest(
+        "textDocument/definition",
+        {
+            textDocument: { uri: request.FileUri.toString() },
+            position: {
+                line: request.Line,
+                character: request.Column
+            }
+        },
+        token
+    );
 }
