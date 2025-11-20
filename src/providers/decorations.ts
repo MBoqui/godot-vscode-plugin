@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 
-import { ExtensionContext } from "vscode";
+import { ExtensionContext, Location, Position, Range, Uri } from "vscode";
+
 import { get_configuration } from "../utils";
-import { globals } from "../extension";
 
 const grayDecoration = vscode.window.createTextEditorDecorationType({
         color: "#888888",
@@ -102,16 +102,12 @@ export class DecorationsProvider {
             }
 
             const nameIndex = line.indexOf(symbolName, matchIndex);
-            const range = new vscode.Range(
-                new vscode.Position(lineIndex, nameIndex),
-                new vscode.Position(lineIndex, nameIndex + symbolName.length)
+            const range = new Range(
+                new Position(lineIndex, nameIndex),
+                new Position(lineIndex, nameIndex + symbolName.length)
             );
 
-            const references = await getReferences({
-                FileUri: editor.document.uri,
-                Line: range.start.line,
-                Column: range.start.character
-            });
+            const references = await getReferences(editor.document.uri, range.start);
 
             if (!references || references.length <= 1) {
                 decorations.push({ range });
@@ -122,24 +118,10 @@ export class DecorationsProvider {
     }
 }
 
-interface ReferenceRequest {
-    FileUri: vscode.Uri;
-    Line: number;
-    Column: number;
-}
-
-interface ReferenceLocation {
-    uri: string;
-    range: vscode.Range;
-}
-
-async function getReferences(request: ReferenceRequest): Promise<ReferenceLocation[]> {
-    return await globals.lsp.client.sendRequest("textDocument/references", {
-        textDocument: { uri: request.FileUri.toString() },
-        position: {
-            line: request.Line,
-            character: request.Column
-        },
-        context: { includeDeclaration: false }
-    });
+async function getReferences(uri: Uri, position: Position): Promise<Location[]> {
+    return await vscode.commands.executeCommand<Location[]>(
+        "vscode.executeReferenceProvider",
+        uri,
+        position
+    );
 }

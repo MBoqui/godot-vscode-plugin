@@ -1,130 +1,83 @@
 import * as vscode from "vscode";
 
-import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, TextDocument } from "vscode";
+import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, Location, Position, Range, TextDocument, Uri } from "vscode";
 
 import { get_configuration } from "../utils";
-import { globals } from "../extension";
 
-interface SymbolRequest {
-    FileUri: vscode.Uri;
-    Line: number;
-    Column: number;
-}
+class ReferenceCodeLens extends CodeLens {
+    uri: Uri;
 
-interface SymbolLocation {
-    uri: string;
-    range: vscode.Range;
-}
-
-class ReferenceCodeLens extends vscode.CodeLens {
-    symbolName: string;
-    documentUri: string;
-
-    constructor(range: vscode.Range, symbolName: string, documentUri: string) {
+    constructor(uri: Uri, range: Range) {
         super(range);
-        this.symbolName = symbolName;
-        this.documentUri = documentUri;
+        this.uri = uri;
     }
 
-    async resolve(token: CancellationToken): Promise<vscode.CodeLens> {
+    async resolve(token: CancellationToken): Promise<CodeLens> {
         if (token.isCancellationRequested) {
-            return null;
-        }
-        const range = this.range;
-        const locations = await getDefinition({
-            FileUri: vscode.Uri.parse(this.documentUri),
-            Line: range.start.line,
-            Column: range.start.character
-        }, token);
-        if (token.isCancellationRequested) {
-            return null;
-        }
-        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
             return null;
         }
 
-        const references = await getReferences({
-            FileUri: vscode.Uri.parse(this.documentUri),
-            Line: range.start.line,
-            Column: range.start.character
-        }, token);
+        const references = await getReferences(this.uri, this.range.start);
         if (token.isCancellationRequested) {
             return null;
         }
-        if (!references || references.length <= 1) {
-            return null;
-        }
 
-        const remappedLocations = references
-            .map(loc => new vscode.Location(vscode.Uri.parse(loc.uri), loc.range))
-            .filter(loc => loc.range.start.line !== range.start.line);
-        const count = remappedLocations.length;
-        if (count === 0) {
-            return null;
-        }
+        const referencesNoDeclaration = references
+            .filter(loc =>
+                !loc.range.isEqual(this.range)
+                ||
+                loc.uri.fsPath !== this.uri.fsPath
+            );
+        const count = referencesNoDeclaration.length;
 
         this.command = {
             title: count === 1 ? "1 reference" : `${count} references`,
-            command: "editor.action.showReferences",
-            arguments: [vscode.Uri.parse(this.documentUri), range.start, remappedLocations]
+            command: count === 0 ?"" : "editor.action.showReferences",
+            arguments: [this.uri, this.range.start, referencesNoDeclaration]
         };
         return this;
     }
 }
 
-class OverrideCodeLens extends vscode.CodeLens {
-    symbolName: string;
-    documentUri: string;
+class OverrideCodeLens extends CodeLens {
+    uri: Uri;
 
-    constructor(range: vscode.Range, symbolName: string, documentUri: string) {
+    constructor(uri: Uri, range: Range) {
         super(range);
-        this.symbolName = symbolName;
-        this.documentUri = documentUri;
+        this.uri = uri;
     }
 
-    async resolve(token: CancellationToken): Promise<vscode.CodeLens> {
+    async resolve(token: CancellationToken): Promise<CodeLens> {
         if (token.isCancellationRequested) {
             return null;
         }
-        const range = this.range;
-        const locations = await getDefinition({
-            FileUri: vscode.Uri.parse(this.documentUri),
-            Line: range.start.line,
-            Column: range.start.character
-        }, token);
+
+        const definition = await getDefinition(this.uri, this.range.start);
         if (token.isCancellationRequested) {
             return null;
         }
-        if (!locations || (Array.isArray(locations) && locations.length === 0)) {
-            this.command = {
-                title: "overrides native",
-                command: "",
-                arguments: []
-            };
-            return this;
-        }
 
-        const loc = Array.isArray(locations) ? locations[0] : locations;
-        const isSameFile = vscode.Uri.parse(loc.uri).toString() === this.documentUri;
-        const isSameLine = loc.range?.start?.line === range.start.line;
-        if (isSameFile && isSameLine) {
+        if (definition.range.isEqual(this.range) && definition.uri.fsPath === this.uri.fsPath) {
             return null;
         }
 
-        const file = vscode.Uri.parse(loc.uri).fsPath.split(/[/\\]/).pop();
-        const lineNum = (loc.range?.start?.line ?? 0) + 1;
+        const fileName = definition.uri.fsPath.split(/[/\\]/).pop();
+        const lineNumber = (definition.range.start.line) + 1;
+
+        const definitionIsDocs = fileName.endsWith(".gddoc");
+        const commandTitle = definitionIsDocs ? "overrides native" : `overrides: ${fileName}:${lineNumber}`;
+
         this.command = {
-            title: `overrides: ${file}:${lineNum}`,
+            title: commandTitle,
             command: "vscode.open",
             arguments: [
-            vscode.Uri.parse(loc.uri),
-            { selection: new vscode.Range(loc.range.start, loc.range.start) }
+                definition.uri,
+                { selection: definition.range }
             ]
         };
         return this;
     }
 }
-
 
 export class GDCodeLensProvider implements CodeLensProvider {
     public readonly onDidChangeCodeLenses?: Event<void>;
@@ -211,13 +164,13 @@ export class GDCodeLensProvider implements CodeLensProvider {
 
             const symbolName = match[1];
             const nameIndex = line.indexOf(symbolName, match.index);
-            const range = new vscode.Range(
-                new vscode.Position(i, nameIndex),
-                new vscode.Position(i, nameIndex + symbolName.length)
+            const range = new Range(
+                new Position(i, nameIndex),
+                new Position(i, nameIndex + symbolName.length)
             );
 
-            codeLenses.push(new ReferenceCodeLens(range, symbolName, document.uri.toString()));
-            codeLenses.push(new OverrideCodeLens(range, symbolName, document.uri.toString()));
+            codeLenses.push(new ReferenceCodeLens(document.uri, range));
+            codeLenses.push(new OverrideCodeLens(document.uri, range));
         }
         return codeLenses;
     }
@@ -239,31 +192,19 @@ export class GDCodeLensProvider implements CodeLensProvider {
     }
 }
 
-async function getReferences(request: SymbolRequest, token: CancellationToken): Promise<SymbolLocation[]> {
-    return await globals.lsp.client.sendRequest(
-        "textDocument/references",
-        {
-            textDocument: { uri: request.FileUri.toString() },
-            position: {
-                line: request.Line,
-                character: request.Column
-            },
-            context: { includeDeclaration: false }
-        },
-        token
+async function getReferences(uri: Uri, position: Position): Promise<Location[]> {
+    return await vscode.commands.executeCommand<Location[]>(
+        "vscode.executeReferenceProvider",
+        uri,
+        position
     );
 }
 
-async function getDefinition(request: SymbolRequest, token: CancellationToken): Promise<SymbolLocation[] | undefined> {
-    return await globals.lsp.client.sendRequest(
-        "textDocument/definition",
-        {
-            textDocument: { uri: request.FileUri.toString() },
-            position: {
-                line: request.Line,
-                character: request.Column
-            }
-        },
-        token
+async function getDefinition(uri: Uri, position: Position): Promise<Location> {
+    const allDefinition = await vscode.commands.executeCommand<Location[]>(
+        "vscode.executeDefinitionProvider",
+        uri,
+        position
     );
+    return allDefinition[0];
 }
