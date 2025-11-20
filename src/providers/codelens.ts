@@ -115,8 +115,11 @@ class OverrideCodeLens extends vscode.CodeLens {
         const lineNum = (loc.range?.start?.line ?? 0) + 1;
         this.command = {
             title: `overrides: ${file}:${lineNum}`,
-            command: "",
-            arguments: []
+            command: "vscode.open",
+            arguments: [
+            vscode.Uri.parse(loc.uri),
+            { selection: new vscode.Range(loc.range.start, loc.range.start) }
+            ]
         };
         return this;
     }
