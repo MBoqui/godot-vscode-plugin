@@ -82,7 +82,7 @@ class OverrideCodeLens extends CodeLens {
 export class GDCodeLensProvider implements CodeLensProvider {
     public readonly onDidChangeCodeLenses?: Event<void>;
 
-    private funcRegex = /^(?:static\s+)?func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
+    private funcRegex = /^(?:@[a-zA-Z_][a-zA-Z0-9_]*\s+)?(?:static\s+)?func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:??/m;
     private varRegex = /^(?:@[a-zA-Z_][a-zA-Z0-9_]*\s+)?(?:static\s+)?var\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
     private constRegex = /^const\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
     private signalRegex = /^signal\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
