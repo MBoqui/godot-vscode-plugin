@@ -17,11 +17,11 @@ export class DecorationsProvider {
         }
 
         this.updateCachedConfig();
-                const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(e => {
-                    if (e.affectsConfiguration("godotTools")) {
-                        this.updateCachedConfig();
-                    }
-                });
+        const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration("godotTools")) {
+                this.updateCachedConfig();
+            }
+        });
 
         context.subscriptions.push(
             configChangeDisposable,
@@ -59,7 +59,7 @@ export class DecorationsProvider {
 
         const decorations: vscode.DecorationOptions[] = [];
 
-        const funcRegex = /^(?:static\s+)?func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:/m;
+        const funcRegex = /^(?:@[a-zA-Z_][a-zA-Z0-9_]*\s+)?(?:static\s+)?func\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(->\s*[^:]+)?\s*:??/m;
         const varRegex = /^(?:@[a-zA-Z_][a-zA-Z0-9_]*\s+)?(?:static\s+)?var\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
         const constRegex = /^const\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
         const signalRegex = /^signal\s+([a-zA-Z_][a-zA-Z0-9_]*)/m;
