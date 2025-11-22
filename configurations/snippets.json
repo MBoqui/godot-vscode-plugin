@@ -288,5 +288,25 @@
 			"await get_tree().create_timer($1).timeout"
 		],
 		"description": "Waits for a given amount of seconds"
+	},
+	"Private Setter Public Getter": {
+		"prefix": "priv",
+		"body": [
+			"var ${1:propertyName}: ${2:Variant}:",
+			"\tset(x): assert(false, \"Private setter\")",
+			"\tget(): return _${1:propertyName}",
+			"var _${1:propertyName}: ${2:Variant}"
+		],
+		"description": "Create a public property with a private setter backed by a private var"
+	},
+	"Static Private Setter Public Getter": {
+		"prefix": "static priv",
+		"body": [
+			"static var ${1:propertyName}: ${2:Variant}:",
+			"\tset(x): assert(false, \"Private setter\")",
+			"\tget(): return _${1:propertyName}",
+			"static var _${1:propertyName}: ${2:Variant}"
+		],
+		"description": "Create a static public property with a private setter backed by a private static var"
 	}
 }

@@ -1,3 +1,4 @@
+export * from "./code_actions";
 export * from "./codelens";
 export * from "./completions";
 export * from "./decorations";
