@@ -15,6 +15,7 @@ import {
 	GDCodeLensProvider,
 	GDReferenceProvider,
 	GDDecorationsProvider,
+	GDCodeActionProvider,
 } from "./providers";
 import { ClientConnectionManager } from "./lsp";
 import { ScenePreviewProvider } from "./scene_tools";
@@ -56,6 +57,7 @@ interface Extension {
 	codeLensProvider?: GDCodeLensProvider;
 	decorationProvider?: GDDecorationsProvider;
 	referenceProvider?: GDReferenceProvider;
+	codeActionProvider?: GDCodeActionProvider;
 }
 
 export const globals: Extension = {};
@@ -77,6 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
 	globals.codeLensProvider = new GDCodeLensProvider(context);
 	globals.decorationProvider = new GDDecorationsProvider(context);
 	globals.referenceProvider = new GDReferenceProvider(context);
+	globals.codeActionProvider = new GDCodeActionProvider(context);
 	// globals.semanticTokensProvider = new GDSemanticTokensProvider(context);
 	// globals.completionProvider = new GDCompletionItemProvider(context);
 	// globals.tasksProvider = new GDTaskProvider(context);
