@@ -376,45 +376,90 @@
 					"default": true,
 					"description": "Whether to enable inlay hints in GDResource (.tscn, .tres, etc) files"
 				},
-				"godotTools.referencesCodeLens.enabled": {
+				"godotTools.codeLens.override.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable override CodeLens in GDScript files."
+				},
+				"godotTools.codeLens.reference.enabled": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable/disable references CodeLens in GDScript files."
 				},
-				"godotTools.referencesCodeLens.func": {
+				"godotTools.codeLens.reference.func": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for functions in GDScript files."
 				},
-				"godotTools.referencesCodeLens.var": {
+				"godotTools.codeLens.reference.var": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for variables in GDScript files."
 				},
-				"godotTools.referencesCodeLens.const": {
+				"godotTools.codeLens.reference.const": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for constants in GDScript files."
 				},
-				"godotTools.referencesCodeLens.signal": {
+				"godotTools.codeLens.reference.signal": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for signals in GDScript files."
 				},
-				"godotTools.referencesCodeLens.enum": {
+				"godotTools.codeLens.reference.enum": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for enums in GDScript files."
 				},
-				"godotTools.referencesCodeLens.className": {
+				"godotTools.codeLens.reference.className": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for class_name declarations in GDScript files."
 				},
-				"godotTools.referencesCodeLens.class": {
+				"godotTools.codeLens.reference.class": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable reference count CodeLens for class (subclass) declarations in GDScript files."
+				},
+				"godotTools.decoration.noReference.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable no-reference decoration in GDScript files."
+				},
+				"godotTools.decoration.noReference.func": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for functions in GDScript files."
+				},
+				"godotTools.decoration.noReference.var": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for variables in GDScript files."
+				},
+				"godotTools.decoration.noReference.const": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for constants in GDScript files."
+				},
+				"godotTools.decoration.noReference.signal": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for signals in GDScript files."
+				},
+				"godotTools.decoration.noReference.enum": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for enums in GDScript files."
+				},
+				"godotTools.decoration.noReference.className": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for class_name declarations in GDScript files."
+				},
+				"godotTools.decoration.noReference.class": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable no-reference decoration for class declarations in GDScript files."
 				}
 			}
 		},

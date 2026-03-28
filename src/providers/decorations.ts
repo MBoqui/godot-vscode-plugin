@@ -44,19 +44,20 @@ export class GDDecorationsProvider {
 
     private updateCachedConfig() {
         this.cachedConfig = {
-            enabled: get_configuration("referencesCodeLens.enabled", true),
-            func: get_configuration("referencesCodeLens.func", true),
-            var: get_configuration("referencesCodeLens.var", true),
-            const: get_configuration("referencesCodeLens.const", true),
-            signal: get_configuration("referencesCodeLens.signal", true),
-            enum: get_configuration("referencesCodeLens.enum", true),
-            className: get_configuration("referencesCodeLens.className", true),
-            class: get_configuration("referencesCodeLens.class", true),
+            enabled: get_configuration("decoration.noReference.enabled", true),
+            func: get_configuration("decoration.noReference.func", true),
+            var: get_configuration("decoration.noReference.var", true),
+            const: get_configuration("decoration.noReference.const", true),
+            signal: get_configuration("decoration.noReference.signal", true),
+            enum: get_configuration("decoration.noReference.enum", true),
+            className: get_configuration("decoration.noReference.className", true),
+            class: get_configuration("decoration.noReference.class", true),
         };
     }
 
     async highlightUnusedSymbols(editor: vscode.TextEditor) {
         if (!editor) return;
+        if (!this.cachedConfig.enabled) return;
 
         const decorations: vscode.DecorationOptions[] = [];
 
@@ -78,36 +79,10 @@ export class GDDecorationsProvider {
                 { regex: classRegex, enabled: this.cachedConfig.class },
             ];
 
-        const text = editor.document.getText();
-        const lines = text.split("\n");
+        const regexes = matchers.filter(m => m.enabled).map(m => m.regex);
+        const found_ranges = getMatches(regexes, editor.document);
 
-        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-            const line = lines[lineIndex];
-            let match: RegExpExecArray | null = null;
-            let symbolName: string | undefined;
-            let matchIndex: number | undefined;
-
-            for (const matcher of matchers) {
-                if (!matcher.enabled) continue;
-                const m = matcher.regex.exec(line);
-                if (m && m.index !== undefined) {
-                    match = m;
-                    symbolName = m[1];
-                    matchIndex = m.index;
-                    break;
-                }
-            }
-
-            if (!match || !symbolName || matchIndex === undefined) {
-                continue;
-            }
-
-            const nameIndex = line.indexOf(symbolName, matchIndex);
-            const range = new Range(
-                new Position(lineIndex, nameIndex),
-                new Position(lineIndex, nameIndex + symbolName.length)
-            );
-
+        for (const range of found_ranges) {
             const references = await getReferences(editor.document, range.start);
 
             if (!references || references.length <= 0) {
@@ -117,6 +92,38 @@ export class GDDecorationsProvider {
 
         editor.setDecorations(grayDecoration, decorations);
     }
+}
+
+function getMatches(regexes: RegExp[], document: TextDocument): Range[] {
+    const ranges: Range[] = [];
+
+    const lines = document.getText().split("\n");
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let all_matches: RegExpExecArray | null = null;
+        for (const regex of regexes) {
+            const match = regex.exec(line);
+            if (match) {
+                all_matches = match;
+                break;
+            }
+        }
+
+        if (!all_matches || all_matches.index === undefined) {
+            continue;
+        }
+
+        const symbolName = all_matches[1];
+        const nameIndex = line.indexOf(symbolName, all_matches.index);
+        const range = new Range(
+            new Position(i, nameIndex),
+            new Position(i, nameIndex + symbolName.length)
+        );
+
+        ranges.push(range);
+    }
+
+    return ranges;
 }
 
 async function getReferences(document: TextDocument, position: Position, token?: CancellationToken): Promise<Location[]> {
