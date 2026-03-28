@@ -1,14 +1,15 @@
 import * as vscode from "vscode";
 
-import { ExtensionContext, Location, Position, Range, Uri } from "vscode";
+import { CancellationToken, ExtensionContext, Location, Position, Range, TextDocument } from "vscode";
 
 import { get_configuration } from "../utils";
+import { globals } from "../extension";
 
 const grayDecoration = vscode.window.createTextEditorDecorationType({
         color: "#888888",
     });
 
-export class DecorationsProvider {
+export class GDDecorationsProvider {
     private cachedConfig: Record<string, boolean> = {};
 
     constructor(private context: ExtensionContext) {
@@ -107,9 +108,9 @@ export class DecorationsProvider {
                 new Position(lineIndex, nameIndex + symbolName.length)
             );
 
-            const references = await getReferences(editor.document.uri, range.start);
+            const references = await getReferences(editor.document, range.start);
 
-            if (!references || references.length <= 1) {
+            if (!references || references.length <= 0) {
                 decorations.push({ range });
             }
         }
@@ -118,10 +119,12 @@ export class DecorationsProvider {
     }
 }
 
-async function getReferences(uri: Uri, position: Position): Promise<Location[]> {
-    return await vscode.commands.executeCommand<Location[]>(
-        "vscode.executeReferenceProvider",
-        uri,
-        position
+async function getReferences(document: TextDocument, position: Position, token?: CancellationToken): Promise<Location[]> {
+    const referenceProvider = globals.referenceProvider;
+    return await referenceProvider.provideReferences(
+        document,
+        position,
+        {includeDeclaration: false},
+        token
     );
 }
