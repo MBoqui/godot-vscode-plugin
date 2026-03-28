@@ -3,13 +3,14 @@ import * as vscode from "vscode";
 import { CancellationToken, CodeLens, CodeLensProvider, Event, ExtensionContext, Location, Position, Range, TextDocument, Uri } from "vscode";
 
 import { get_configuration } from "../utils";
+import { globals } from "../extension";
 
 class ReferenceCodeLens extends CodeLens {
-    uri: Uri;
+    document: TextDocument;
 
-    constructor(uri: Uri, range: Range) {
+    constructor(document: TextDocument, range: Range) {
         super(range);
-        this.uri = uri;
+        this.document = document;
     }
 
     async resolve(token: CancellationToken): Promise<CodeLens> {
@@ -17,23 +18,16 @@ class ReferenceCodeLens extends CodeLens {
             return null;
         }
 
-        const references = await getReferences(this.uri, this.range.start);
+        const references = await getReferences(this.document, this.range.start, token);
         if (token.isCancellationRequested) {
             return null;
         }
-
-        const referencesNoDeclaration = references
-            .filter(loc =>
-                !loc.range.isEqual(this.range)
-                ||
-                loc.uri.fsPath !== this.uri.fsPath
-            );
-        const count = referencesNoDeclaration.length;
+        const count = references.length;
 
         this.command = {
             title: count === 1 ? "1 reference" : `${count} references`,
             command: count === 0 ?"" : "editor.action.showReferences",
-            arguments: [this.uri, this.range.start, referencesNoDeclaration]
+            arguments: [this.document.uri, this.range.start, references]
         };
         return this;
     }
@@ -169,7 +163,7 @@ export class GDCodeLensProvider implements CodeLensProvider {
                 new Position(i, nameIndex + symbolName.length)
             );
 
-            codeLenses.push(new ReferenceCodeLens(document.uri, range));
+            codeLenses.push(new ReferenceCodeLens(document, range));
             codeLenses.push(new OverrideCodeLens(document.uri, range));
         }
         return codeLenses;
@@ -192,11 +186,13 @@ export class GDCodeLensProvider implements CodeLensProvider {
     }
 }
 
-async function getReferences(uri: Uri, position: Position): Promise<Location[]> {
-    return await vscode.commands.executeCommand<Location[]>(
-        "vscode.executeReferenceProvider",
-        uri,
-        position
+async function getReferences(document: TextDocument, position: Position, token: CancellationToken): Promise<Location[]> {
+    const referenceProvider = globals.referenceProvider;
+    return await referenceProvider.provideReferences(
+        document,
+        position,
+        {includeDeclaration: false},
+        token
     );
 }
 
