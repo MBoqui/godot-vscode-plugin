@@ -17,7 +17,7 @@ interface QueuedRequest {
     position: Position;
     includeDeclaration: boolean;
     token?: CancellationToken;
-    resolve: (value: Location[] | null) => void;
+    resolve: (value: Location[] | undefined) => void;
 }
 
 export class GDReferenceProvider implements ReferenceProvider {
@@ -41,18 +41,18 @@ export class GDReferenceProvider implements ReferenceProvider {
         position: Position,
         context: ReferenceContext,
         token?: CancellationToken
-    ): Promise<Location[] | null> {
+    ): Promise<Location[] | undefined> {
         const uri = document.uri;
         const includeDeclaration = context.includeDeclaration;
 
         const cacheKey = this.getCacheKey(uri, position);
 
-        if (this.referenceCache.has(cacheKey)) {
-            const references = this.referenceCache.get(cacheKey);
+        const references = this.referenceCache.get(cacheKey);
+        if (references) {
             return this.filterReferences(references, uri, position, includeDeclaration);
         }
 
-        return new Promise<Location[] | null>((resolve, reject) => {
+        return new Promise<Location[] | undefined>((resolve, reject) => {
             this.requestQueue.push({
                 uri,
                 position,
@@ -83,22 +83,28 @@ export class GDReferenceProvider implements ReferenceProvider {
             const cancelledRequests = new Set<QueuedRequest>();
             for (const request of this.requestQueue) {
                 if (request.token?.isCancellationRequested) {
-                    request.resolve(null);
+                    request.resolve(undefined);
                     cancelledRequests.add(request);
                 }
             }
+
             if (cancelledRequests.size > 0) {
                 this.requestQueue = this.requestQueue.filter(r => !cancelledRequests.has(r));
                 continue;
             }
 
             const request = this.requestQueue.at(0);
+            if (!request) break;
+
             const uri = request.uri;
             const position = request.position;
 
             const cacheKey = this.getCacheKey(uri, position);
 
             const references = await this.requestReferences(uri, position);
+            if (!references) {
+                throw new Error("Failed to fetch references from language server");
+            }
             this.referenceCache.set(cacheKey, references);
 
             const requestsToResolve = new Set<QueuedRequest>();
@@ -117,14 +123,14 @@ export class GDReferenceProvider implements ReferenceProvider {
         this.isProcessing = false;
     }
 
-    private async requestReferences(uri: Uri, position: Position): Promise<Location[]> {
-        const result = await globals.lsp.client.send_request<ReferenceResponse[]>("textDocument/references", {
+    private async requestReferences(uri: Uri, position: Position): Promise<Location[] | undefined> {
+        const result = await globals.lsp?.client.sendRequest<ReferenceResponse[]>("textDocument/references", {
             textDocument: { uri: uri.toString() },
             position: position,
             context: { includeDeclaration: true }
         });
 
-        return result.map(response => new Location(
+        return result?.map(response => new Location(
             Uri.parse(response.uri),
             new Range(
                 new Position(response.range.start.line, response.range.start.character),

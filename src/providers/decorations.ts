@@ -126,9 +126,8 @@ function getMatches(regexes: RegExp[], document: TextDocument): Range[] {
     return ranges;
 }
 
-async function getReferences(document: TextDocument, position: Position, token?: CancellationToken): Promise<Location[]> {
-    const referenceProvider = globals.referenceProvider;
-    return await referenceProvider.provideReferences(
+async function getReferences(document: TextDocument, position: Position, token?: CancellationToken): Promise<Location[] | undefined> {
+    return await globals.referenceProvider?.provideReferences(
         document,
         position,
         {includeDeclaration: false},

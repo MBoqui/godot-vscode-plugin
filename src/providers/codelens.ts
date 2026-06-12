@@ -6,7 +6,7 @@ import { get_configuration } from "../utils";
 import { globals } from "../extension";
 
 interface GDCodeLens extends CodeLens {
-    resolve(token: CancellationToken): Promise<CodeLens>;
+    resolve(token: CancellationToken): Promise<CodeLens | undefined>;
 }
 
 class OverrideCodeLens extends CodeLens implements GDCodeLens {
@@ -18,7 +18,7 @@ class OverrideCodeLens extends CodeLens implements GDCodeLens {
     }
 
     static async provide(document: TextDocument, token: CancellationToken): Promise<CodeLens[]> {
-        if (!globals.codeLensProvider.cachedConfig.overrideEnabled) {
+        if (!globals.codeLensProvider?.cachedConfig.overrideEnabled) {
             return [];
         }
 
@@ -43,28 +43,31 @@ class OverrideCodeLens extends CodeLens implements GDCodeLens {
         return codeLenses;
     }
 
-    async resolve(token: CancellationToken): Promise<CodeLens> {
+    async resolve(token: CancellationToken): Promise<CodeLens | undefined> {
         if (this.isResolved) {
             return this;
         }
 
         if (token.isCancellationRequested) {
-            return null;
+            return undefined;
         }
 
         const definition = await getDefinition(this.uri, this.range.start);
         if (token.isCancellationRequested) {
-            return null;
+            return undefined;
         }
 
         if (definition.range.isEqual(this.range) && definition.uri.fsPath === this.uri.fsPath) {
-            return null;
+            return undefined;
         }
 
         const fileName = definition.uri.fsPath.split(/[/\\]/).pop();
-        const lineNumber = (definition.range.start.line) + 1;
+        if (!fileName) {
+            return undefined;
+        }
 
         const definitionIsDocs = fileName.endsWith(".gddoc");
+        const lineNumber = (definition.range.start.line) + 1;
         const commandTitle = definitionIsDocs ? "overrides native" : `overrides: ${fileName}:${lineNumber}`;
 
         this.command = {
@@ -88,7 +91,7 @@ class ReferenceCodeLens extends CodeLens implements GDCodeLens {
     }
 
     static provide(document: TextDocument): CodeLens[] {
-        if (!globals.codeLensProvider.cachedConfig.referenceEnabled) {
+        if (!globals.codeLensProvider?.cachedConfig.referenceEnabled) {
             return [];
         }
 
@@ -122,14 +125,14 @@ class ReferenceCodeLens extends CodeLens implements GDCodeLens {
         return codeLenses;
     }
 
-    async resolve(token: CancellationToken): Promise<CodeLens> {
+    async resolve(token: CancellationToken): Promise<CodeLens | undefined> {
         if (token.isCancellationRequested) {
-            return null;
+            return undefined;
         }
 
         const references = await getReferences(this.document, this.range.start, token);
-        if (token.isCancellationRequested) {
-            return null;
+        if (!references || token.isCancellationRequested) {
+            return undefined;
         }
 
         const count = references.length;
@@ -199,9 +202,9 @@ export class GDCodeLensProvider implements CodeLensProvider {
     public async resolveCodeLens(
         codeLens: GDCodeLens,
         token: CancellationToken
-    ): Promise<CodeLens | null> {
+    ): Promise<CodeLens | undefined> {
         if (token.isCancellationRequested) {
-            return null;
+            return undefined;
         }
 
         return await codeLens.resolve(token);
@@ -240,9 +243,8 @@ function getMatches(regexes: RegExp[], document: TextDocument): Range[] {
     return ranges;
 }
 
-async function getReferences(document: TextDocument, position: Position, token: CancellationToken): Promise<Location[]> {
-    const referenceProvider = globals.referenceProvider;
-    return await referenceProvider.provideReferences(
+async function getReferences(document: TextDocument, position: Position, token: CancellationToken): Promise<Location[] | undefined> {
+    return await globals.referenceProvider?.provideReferences(
         document,
         position,
         {includeDeclaration: false},
